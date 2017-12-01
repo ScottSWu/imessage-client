@@ -1,0 +1,24 @@
+{
+  "name": "imessage-client",
+  "version": "0.1.0",
+  "description": "imessage client based on NodeJS",
+  "main": "web.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ScottSWu/imessage-client.git"
+  },
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/ScottSWu/imessage-client/issues"
+  },
+  "homepage": "https://github.com/ScottSWu/imessage-client#readme",
+  "dependencies": {
+    "express": "^4.16.2",
+    "osa-imessage": "^2.3.0",
+    "socket.io": "^2.0.4"
+  }
+}
