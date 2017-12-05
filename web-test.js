@@ -3,8 +3,6 @@ const auth = require("express-basic-auth");
 const express = require("express");
 const fs = require("fs");
 const https = require("https");
-const imessage = require("osa-imessage");
-const socket = require("socket.io");
 
 // Parse arguments
 let port = argv["port"] || 8080;
@@ -15,7 +13,13 @@ let cert = argv["cert"] || "private/certificate.pem";
 
 // iMessage
 const messages = {};
-imessage.listen().on("message", data => {
+setInterval(() => {
+  const data = {
+    date: new Date(),
+    fromMe: (Math.random() < 0.2),
+    handle: "Test ID " + Math.floor(Math.random() * 3),
+    message: Math.random(),
+  };
   const id = data.handle;
   if (messages[id]) {
     messages[id].push(data);
@@ -23,7 +27,7 @@ imessage.listen().on("message", data => {
   else {
     messages[id] = [data];
   }
-});
+}, 5000);
 
 // Setup the express server
 const app = express();
@@ -59,15 +63,21 @@ app.get("/socket.io.js", function(req, res) {
 // Dynamic routes
 app.get("/list", function(req, res) { // List all chats
   console.log("[/list]");
-  imessage.getRecentChats(20).then(chats => {
-    res.type("json");
-    res.send(JSON.stringify(chats.map(chat => {
-      return {
-        id: chat.recipientId,
-        service: chat.serviceName,
-      };
-    })));
-  });
+  res.type("json");
+  res.send(JSON.stringify([
+    {
+      id: "Test ID 0",
+      service: "SMS",
+    },
+    {
+      id: "Test ID 1",
+      service: "SMS",
+    },
+    {
+      id: "Test ID 2",
+      service: "iMessage",
+    },
+  ]));
 });
 
 app.post("/chat", function(req, res) { // View a single chat
@@ -93,11 +103,15 @@ app.post("/send", function(req, res) { // Send a message
   console.log("[/send]");
   const id = req.params["id"];
   const msg = req.params["msg"];
-  imessage.send(id, msg).then(v => {
+
+  if (Math.random() < 0.5) {
+    console.log("Send succeeded");
     res.sendStatus(200);
-  }).catch(e => {
+  }
+  else {
+    console.log("Send failed");
     res.sendStatus(500);
-  });
+  }
 });
 
 // Start the server
