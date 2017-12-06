@@ -2,8 +2,201 @@
   <head>
     <title>iMessage Web Client</title>
     <script type="text/javascript" src="socket.io.js"></script>
+    <script type="text/javascript">
+// Mobile
+const mobile = location.search == "?mobile";
+let socket = io();
+let current = null;
+
+window.addEventListener("load", function() {
+  if (mobile) {
+    document.getElementById("list_pane").classList.add("mobile");
+    document.getElementById("chat_pane").classList.add("mobile");
+  }
+
+  socket.on("list", load_list);
+  socket.on("chat", load_chat);
+  socket.emit("list");
+  socket.emit("chat");
+
+  document.getElementById("input_box").addEventListener("keypress", send_chat);
+});
+
+function build_entry_dom(handle, service) {
+  const entry = document.createElement("div");
+  entry.classList.add("entry");
+  entry.innerHTML = handle + " (" + service + ")";
+  return entry;
+}
+
+function build_chat_dom(handle, service) {
+  const chat = document.createElement("div");
+  chat.id = serialize(handle);
+  chat.dataset.handle = handle;
+  chat.classList.add("chat");
+  chat.classList.add("hidden");
+  return chat;
+}
+
+function build_text_dom(content, fromMe) {
+  const text = document.createElement("div");
+  text.classList.add("text");
+  if (fromMe) {
+    text.classList.add("self");
+  }
+  text.innerHTML = content;
+  return text;
+}
+
+function load_list(data) {
+  // Populate chat list
+  const list_pane = document.getElementById("list_pane");
+  const text_pane = document.getElementById("text_pane");
+  for (const chat of data) {
+    const entry_dom = build_entry_dom(chat.handle, chat.service);
+    entry_dom.addEventListener("click", () => show_chat(chat.handle));
+    list_pane.appendChild(entry_dom);
+
+    const chat_dom = build_chat_dom(chat.handle);
+    text_pane.appendChild(chat_dom);
+  }
+}
+
+function load_chat(messages) {
+  // Check if the chat is scrolled to the bottom
+  const text_pane = document.getElementById("text_pane");
+  let scrolled = text_pane.scrollTop === (text_pane.scrollHeight - text_pane.offsetHeight);
+
+  for (const message of messages) {
+    const handle = message.handle;
+    const chat = document.getElementById(serialize(handle));
+    if (!chat) {
+      continue;
+    }
+    const text = build_text_dom(message.text, message.fromMe);
+
+    // Append text
+    chat.appendChild(text);
+  }
+
+  // Scroll to the bottom if already at the bottom
+  if (scrolled) {
+    text_pane.scrollTop = text_pane.scrollHeight;
+  }
+}
+
+function serialize(handle) {
+  return "chat_" + handle.replace(/[+ ]/g, "_");
+}
+
+function show_chat(handle) {
+  const chat = document.getElementById(serialize(handle));
+  if (!chat) {
+    // TODO Popup chat does not exist
+    return;
+  }
+
+  if (current) {
+    current.classList.add("hidden");
+  }
+
+  current = chat;
+  current.classList.remove("hidden");
+
+  // Scroll to the bottom
+  const text_pane = document.getElementById("text_pane");
+  text_pane.scrollTop = text_pane.scrollHeight;
+}
+
+function send_chat(e) {
+  if (e.which === 13 && current !== null) {
+    const input = document.getElementById("input_box");
+    const handle = "";
+    const text = input.value;
+    socket.emit("send", {
+      handle: current.dataset.handle,
+      text: text,
+    });
+    input.value = "";
+  }
+}
+    </script>
+    <style type="text/css">
+body {
+  font-family: sans-serif;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.screen {
+  float: left;
+  margin: 0;
+  border: 1px solid black;
+  height: calc(100% - 4em);
+  overflow-y: auto;
+
+  margin-left: 1em;
+  margin-top: 1em;
+  padding: 1em;
+}
+
+#list_pane {
+  width: calc(30% - 4em);
+}
+
+#chat_pane {
+  width: calc(70% - 3em);
+}
+
+#list_pane.mobile {
+  width: calc(100% - 4em);
+}
+
+#chat_pane.mobile {
+  width: calc(100% - 4em);
+}
+
+#text_pane {
+  height: calc(100% - 3em);
+  margin-bottom: 1em;
+  overflow-y: auto;
+}
+
+#input_box {
+  width: 100%;
+}
+
+.entry {
+  border: 1px solid black;
+  margin-bottom: 1em;
+}
+
+.entry:last-child {
+  margin-bottom: 0em;
+}
+
+.text {
+  max-width: 70%;
+}
+
+.text.self {
+  text-align: right;
+  margin-left: calc(30% - 1em);
+}
+
+.hidden {
+  display: none;
+}
+    </style>
   </head>
   <body>
-    <h1>iMessage Web Client</h1>
+    <div class="screen" id="list_pane"></div>
+    <div class="screen" id="chat_pane">
+      <div id="text_pane"></div>
+      <div class="box" id="input_pane">
+        <input type="text" id="input_box" />
+      </div>
+    </div>
   </body>
 </html>

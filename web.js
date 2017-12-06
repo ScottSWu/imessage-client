@@ -4,7 +4,7 @@ const express = require("express");
 const fs = require("fs");
 const https = require("https");
 const imessage = require("osa-imessage");
-const socket = require("socket.io");
+const socketio = require("socket.io");
 
 // Parse arguments
 let port = argv["port"] || 8080;
@@ -12,18 +12,6 @@ let user = argv["user"] || "admin";
 let pass = argv["pass"] || "pick a password";
 let key = argv["key"] || "private/privatekey.pem";
 let cert = argv["cert"] || "private/certificate.pem";
-
-// iMessage
-const messages = {};
-imessage.listen().on("message", data => {
-  const id = data.handle;
-  if (messages[id]) {
-    messages[id].push(data);
-  }
-  else {
-    messages[id] = [data];
-  }
-});
 
 // Setup the express server
 const app = express();
@@ -56,48 +44,86 @@ app.get("/socket.io.js", function(req, res) {
   res.sendFile("node_modules/socket.io-client/dist/socket.io.js", { root: __dirname });
 });
 
-// Dynamic routes
-app.get("/list", function(req, res) { // List all chats
-  console.log("[/list]");
-  imessage.getRecentChats(20).then(chats => {
-    res.type("json");
-    res.send(JSON.stringify(chats.map(chat => {
-      return {
-        id: chat.recipientId,
-        service: chat.serviceName,
-      };
-    })));
-  });
-});
+// Messages
+const messages = new Map();
 
-app.post("/chat", function(req, res) { // View a single chat
-  console.log("[/chat]");
-  const id = req.params["id"];
-  const chat = messages[id];
-  let start = 0;
-  if (req.params["since"] !== undefined) {
-    const since = new Date(req.params["since"]);
-    for (start = chat.length; start > 0; start--) {
-      if (since <= chat[start - 1].data) {
-        break;
-      }
+// Websocket routes
+const io = socketio(server);
+const connections = new Set();
+io.on("connection", function(socket) {
+  // List recent chats
+  socket.on("list", data => {
+    console.log("[:list]");
+    data = data || {};
+    const limit = data.limit || 20;
+    imessage.getRecentChats(limit).then(chats => {
+      socket.emit("list", chats.map(chat => {
+        return {
+          handle: chat.recipientId,
+          service: chat.serviceName,
+        };
+      }));
+    });
+  });
+
+  // Send a message
+  socket.on("send", data => {
+    console.log("[:send]");
+    data = data || {};
+    if (data.handle && data.text) {
+      // TODO Handle bad input / error sending
+      imessage.send(id, msg).then(v => {
+        // OK
+      }).catch(e => {
+        // Not OK
+      });
     }
-  }
+  });
 
-  const msgs = chat.slice(start);
-  res.type("json");
-  res.send(JSON.stringify(msgs));
+  // List recent chat messages
+  socket.on("chat", data=> {
+    console.log("[:chat]");
+    data = data || {};
+    const handle = data.handle;
+    const limit = data.limit || 50;
+    const since = new Date(data.since || 0);
+
+    const gather = (chat, since, limit) => {
+      let i = 0;
+      let start = 0;
+      for (start = chat.length, i = 0; start > 0 && i < limit; start--, i++) {
+        if (since <= chat[start - 1].data) {
+          break;
+        }
+      }
+      return chat.slice(start)
+    };
+
+    let msgs = [];
+    if (handle === undefined) {
+      // Get recent chats from all chats
+      messages.forEach(chat => {
+        msgs = msgs.concat(gather(chat, since, limit));
+      });
+    }
+    else if (messages[handle]) {
+      msgs = msgs.concat(gather(chat, since, limit));
+    }
+
+    socket.emit("chat", msgs);
+  });
 });
 
-app.post("/send", function(req, res) { // Send a message
-  console.log("[/send]");
-  const id = req.params["id"];
-  const msg = req.params["msg"];
-  imessage.send(id, msg).then(v => {
-    res.sendStatus(200);
-  }).catch(e => {
-    res.sendStatus(500);
-  });
+// iMessage client
+imessage.listen().on("message", data => {
+  const handle = data.handle;
+  if (messages.has(handle)) {
+    messages.get(handle).push(data);
+  }
+  else {
+    messages.set(handle, [data]);
+  }
+  io.emit("chat", [data]);
 });
 
 // Start the server
